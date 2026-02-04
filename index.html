@@ -217,7 +217,7 @@
             const p = window.products.find(x => x.id === id);
             if(p.stock <= 0) return alert("Out of stock!");
             let handler = PaystackPop.setup({
-                key: 'pk_test_PASTE_YOUR_PUBLIC_KEY',
+                key: pk_test_e96c3699a2a4d5552e1ed8e3eeecf68b5348b671,
                 email: 'customer@samika.com',
                 amount: p.price * 100,
                 currency: 'GHS',
