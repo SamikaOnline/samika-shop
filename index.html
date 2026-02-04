@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Samika Group Ltd | Cloud Shop</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://js.paystack.co/v1/inline.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+      import { getDatabase, ref, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+      // 1. IMPORTANT: REPLACE THESE KEYS WITH YOUR ACTUAL FIREBASE KEYS
+      const firebaseConfig = {
+        apiKey: "AIzaSyCgNOtIeMtx2cut1UsVO9QHEK805U5wqsM",
+        databaseURL: "https://samika-shop-default-rtdb.firebaseio.com",
+        projectId: "samika-shop",
+        appId: "1:370770626039:web:53529bd245874fe0a25af2"
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const db = getDatabase(app);
+      const productsRef = ref(db, 'products');
+
+      // 2. REAL-TIME DATA SYNC
+      onValue(productsRef, (snapshot) => {
+        const data = snapshot.val();
+        window.products = data ? Object.keys(data).map(key => ({ id: key, ...data[key] })) : [];
+        renderShop();
+        renderAdmin();
+      });
+
+      // 3. CLOUD FUNCTIONS
+      window.addNewProduct = async () => {
+        const name = document.getElementById('new-name').value;
+        const cost = parseFloat(document.getElementById('new-cost').value);
+        const price = parseFloat(document.getElementById('new-price').value);
+        const oldPrice = parseFloat(document.getElementById('old-price').value) || null;
+        const stock = parseInt(document.getElementById('new-stock').value);
+        const imageFile = document.getElementById('new-image').files[0];
+
+        if(!name || !price) return alert("Enter at least a name and price!");
+
+        let base64 = "";
+        if(imageFile) {
+            const reader = new FileReader();
+            reader.readAsDataURL(imageFile);
+            reader.onload = () => {
+                push(productsRef, { name, cost, price, oldPrice, stock, image: reader.result, sales: 0 });
+                alert("Cloud Sync Successful!");
+                resetForm();
+            };
+        } else {
+            push(productsRef, { name, cost, price, oldPrice, stock, image: '', sales: 0 });
+            alert("Cloud Sync Successful!");
+            resetForm();
+        }
+      };
+
+      window.deleteProduct = (id) => {
+        if(confirm("Permanently delete from Samika Cloud?")) remove(ref(db, 'products/' + id));
+      };
+
+      window.processCloudSale = (id) => {
+          const p = window.products.find(x => x.id === id);
+          update(ref(db, 'products/' + id), { 
+              stock: p.stock - 1, 
+              sales: (p.sales || 0) + 1 
+          });
+      };
+    </script>
+
+    <style>
+        .page { display: none; min-height: 100vh; }
+        .page.active { display: block; }
+        .sale-badge { position: absolute; top: 12px; right: 12px; background: #ef4444; color: white; padding: 2px 10px; border-radius: 99px; font-size: 10px; font-weight: 800; z-index: 10; }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+
+    <nav class="bg-blue-900 text-white p-4 sticky top-0 z-50 shadow-md">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-black tracking-widest">SAMIKA GROUP LTD</h1>
+            <div class="space-x-4">
+                <button onclick="showPage('shop-page')" class="text-xs font-bold hover:text-orange-400 uppercase">Shop</button>
+                <button onclick="showPage('login-page')" class="bg-orange-500 px-4 py-1 rounded text-xs font-bold uppercase">Admin Portal</button>
+            </div>
+        </div>
+    </nav>
+
+    <section id="shop-page" class="page active container mx-auto p-6">
+        <div class="text-center my-10">
+            <h2 class="text-3xl font-black text-gray-800 uppercase">Premium Catalog</h2>
+            <p class="text-gray-500 font-medium">Fast Delivery & Secure MoMo Payments</p>
+        </div>
+        <div id="product-grid" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8"></div>
+    </section>
+
+    <section id="login-page" class="page p-10">
+        <div class="max-w-md mx-auto bg-white rounded-2xl shadow-2xl mt-20 border">
+            <div class="bg-blue-900 p-8 text-center text-white italic text-2xl font-black">Admin Access</div>
+            <div class="p-8 space-y-4">
+                <input type="email" id="admin-email" placeholder="samikagroupcompanyltd@gmail.com" class="w-full border p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-900">
+                <input type="password" id="admin-pass" placeholder="Password" class="w-full border p-3 rounded-lg outline-none focus:ring-2 focus:ring-blue-900">
+                <button onclick="handleLogin()" class="w-full bg-blue-900 text-white py-4 rounded-xl font-black hover:bg-blue-800 transition">LOG IN</button>
+            </div>
+        </div>
+    </section>
+
+    <section id="admin-dash" class="page p-6 container mx-auto">
+        <div class="flex justify-between items-center mb-8 bg-white p-4 rounded-xl shadow">
+            <h2 class="text-xl font-bold text-blue-900">Inventory & P&L Control</h2>
+            <div class="text-right">
+                <p class="text-[10px] uppercase font-bold text-gray-400">Net Cloud Profit</p>
+                <p id="stat-profit-display" class="text-2xl font-black text-green-600 italic">GH₵ 0.00</p>
+            </div>
+            <button onclick="showPage('shop-page')" class="text-red-500 text-xs font-bold underline">Logout</button>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="bg-white p-6 rounded-2xl shadow border-t-8 border-orange-500 h-fit">
+                <h3 class="font-bold mb-4 uppercase text-sm tracking-widest">Update Cloud Inventory</h3>
+                <div class="space-y-3">
+                    <input type="text" id="new-name" placeholder="Item Name" class="w-full border p-3 rounded-lg bg-gray-50">
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="number" id="new-cost" placeholder="Cost ₵" class="border p-3 rounded-lg">
+                        <input type="number" id="new-price" placeholder="Sale ₵" class="border p-3 rounded-lg font-bold text-blue-900">
+                    </div>
+                    <input type="number" id="old-price" placeholder="Original Price (For Discount)" class="w-full border p-3 rounded-lg text-xs italic">
+                    <input type="number" id="new-stock" placeholder="Initial Stock" class="w-full border p-3 rounded-lg">
+                    <input type="file" id="new-image" accept="image/*" class="text-xs">
+                    <button onclick="window.addNewProduct()" class="w-full bg-blue-900 text-white py-4 rounded-xl font-black shadow-xl hover:bg-orange-500 transition">SAVE TO ALL CUSTOMERS</button>
+                </div>
+            </div>
+            
+            <div class="lg:col-span-2 bg-white rounded-2xl shadow overflow-hidden">
+                <table class="w-full text-left text-sm">
+                    <thead class="bg-gray-100 uppercase text-[10px] text-gray-500">
+                        <tr>
+                            <th class="p-4">Product</th>
+                            <th class="p-4 text-center">Price</th>
+                            <th class="p-4 text-center">Stock</th>
+                            <th class="p-4 text-center">Sold</th>
+                            <th class="p-4 text-center">Del</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-table-body" class="divide-y"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <a href="https://wa.me/233246197119" target="_blank" class="fixed bottom-6 right-6 bg-green-500 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-2xl z-50 animate-bounce">
+        <i class="fab fa-whatsapp text-3xl"></i>
+    </a>
+
+    <script>
+        function showPage(id) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        function handleLogin() {
+            const e = document.getElementById('admin-email').value;
+            const p = document.getElementById('admin-pass').value;
+            if(e === 'samikagroupcompanyltd@gmail.com' && p === 'admin') showPage('admin-dash');
+            else alert("Samika Access Denied!");
+        }
+
+        function renderShop() {
+            const grid = document.getElementById('product-grid');
+            grid.innerHTML = window.products.length === 0 ? '<p class="text-center col-span-full py-20 text-gray-300">Loading Cloud Products...</p>' : '';
+            window.products.forEach(p => {
+                const discount = p.oldPrice && p.oldPrice > p.price;
+                grid.innerHTML += `
+                    <div class="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden relative flex flex-col h-full hover:shadow-2xl transition">
+                        ${discount ? `<span class="sale-badge">SALE</span>` : ''}
+                        <img src="${p.image || 'https://via.placeholder.com/300'}" class="h-56 w-full object-cover">
+                        <div class="p-6 flex flex-col flex-grow">
+                            <h3 class="font-bold text-gray-800 text-lg mb-2">${p.name}</h3>
+                            <div class="flex items-center gap-2 mb-6">
+                                <span class="text-orange-600 font-black text-2xl uppercase">GH₵ ${p.price}</span>
+                                ${discount ? `<span class="text-gray-300 line-through text-xs italic">GH₵ ${p.oldPrice}</span>` : ''}
+                            </div>
+                            <button onclick="payWithPaystack('${p.id}')" class="mt-auto w-full bg-blue-900 text-white py-3 rounded-2xl font-black shadow-lg hover:bg-orange-500 transition uppercase tracking-tighter">Buy with MoMo</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function renderAdmin() {
+            const tbody = document.getElementById('admin-table-body');
+            tbody.innerHTML = '';
+            let profit = 0;
+            window.products.forEach(p => {
+                profit += (p.sales || 0) * (p.price - p.cost);
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="p-4 flex items-center gap-2">
+                            <img src="${p.image}" class="w-8 h-8 rounded-full object-cover">
+                            <span class="font-bold">${p.name}</span>
+                        </td>
+                        <td class="p-4 text-center font-bold">₵${p.price}</td>
+                        <td class="p-4 text-center font-bold text-blue-600">${p.stock}</td>
+                        <td class="p-4 text-center text-green-600 font-black">${p.sales || 0}</td>
+                        <td class="p-4 text-center"><button onclick="window.deleteProduct('${p.id}')" class="text-red-400 hover:text-red-600"><i class="fas fa-trash"></i></button></td>
+                    </tr>
+                `;
+            });
+            document.getElementById('stat-profit-display').innerText = "GH₵ " + profit.toFixed(2);
+        }
+
+        function payWithPaystack(id) {
+            const p = window.products.find(x => x.id === id);
+            if(p.stock <= 0) return alert("Out of stock!");
+            let handler = PaystackPop.setup({
+                key: 'pk_test_PASTE_YOUR_PUBLIC_KEY',
+                email: 'customer@samika.com',
+                amount: p.price * 100,
+                currency: 'GHS',
+                callback: function(res) {
+                    window.processCloudSale(id);
+                    alert("Order Confirmed! Samika Group thanks you.");
+                }
+            });
+            handler.openIframe();
+        }
+
+        function resetForm() {
+            document.getElementById('new-name').value = '';
+            document.getElementById('new-image').value = '';
+        }
+    </script>
+</body>
+</html>
